@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#153c2b">
+    <title>AgriVision — Field companion</title>
+    <style>
+        :root {
+            --forest: #153c2b;
+            --green: #2e6c4b;
+            --lime: #d8edaa;
+            --paper: #f5f4eb;
+            --card: #fffef8;
+            --ink: #20352a;
+            --muted: #66766b;
+            --line: #dce2d7;
+            --gold: #e9b84f;
+            --red: #9e493c;
+            --shadow: 0 16px 45px #193e2910
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            background: var(--paper);
+            color: var(--ink);
+            font: 16px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif
+        }
+
+        button,
+        input,
+        textarea,
+        select {
+            font: inherit
+        }
+
+        button {
+            cursor: pointer
+        }
+
+        header {
+            height: 76px;
+            background: var(--forest);
+            color: #f8f9ee;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 max(24px, calc((100vw - 1240px)/2));
+            position: sticky;
+            top: 0;
+            z-index: 2
+        }
+
+        .brand {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            font-size: 19px;
+            font-weight: 750;
+            letter-spacing: -.4px
+        }
+
+        .brandmark {
+            width: 38px;
+            height: 38px;
+            border-radius: 13px;
+            background: var(--lime);
+            color: var(--forest);
+            display: grid;
+            place-items: center;
+            font-size: 22px
+        }
+
+        .brand small {
+            display: block;
+            color: #bdd1c2;
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: .12em;
+            text-transform: uppercase
+        }
+
+        .topright {
+            display: flex;
+            align-items: center;
+            gap: 12px
+        }
+
+        .local {
+            font-size: 12px;
+            color: #d5e3d7;
+            border: 1px solid #557661;
+            border-radius: 30px;
+            padding: 7px 11px
+        }
+
+        .local i {
+            display: inline-block;
+            width: 7px;
+            height: 7px;
+            background: #a8d984;
+            border-radius: 50%;
+            margin-right: 6px
+        }
+
+        .lang {
+            border: 0;
+            border-radius: 10px;
+            background: #ffffff16;
+            color: white;
+            padding: 8px 10px
+        }
+
+        .wrap {
+            max-width: 1240px;
+            margin: auto;
+            padding: 34px 24px 60px
+        }
+
+        .intro {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 22px
+        }
+
+        .eyebrow {
+            color: var(--green);
+            text-transform: uppercase;
+            letter-spacing: .15em;
+            font-size: 11px;
+            font-weight: 800
+        }
+
+        .intro h1 {
+            font-size: clamp(30px, 4vw, 45px);
+            letter-spacing: -1.8px;
+            line-height: 1.07;
+            margin: 8px 0
+        }
+
+        .intro p {
+            color: var(--muted);
+            margin: 0;
+            max-width: 620px
+        }
+
+        .season {
+            border: 1px solid var(--line);
+            background: #eeefe4;
+            border-radius: 14px;
+            padding: 12px 16px;
+            min-width: 180px;
+            font-size: 13px
+        }
+
+        .season b {
+            display: block;
+            font-size: 15px
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 360px minmax(0, 1fr);
+            gap: 20px;
+            align-items: start
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            box-shadow: var(--shadow)
+        }
+
+        .scan {
+            overflow: hidden
+        }
+
+        .cardhead {
+            padding: 19px 20px 13px
+        }
+
+        .cardhead h2 {
+            font-size: 18px;
+            margin: 0 0 4px;
+            letter-spacing: -.3px
+        }
+
+        .sub {
+            color: var(--muted);
+            font-size: 13px
+        }
+
+        .drop {
+            margin: 0 16px;
+            border: 1.5px dashed #aab9a9;
+            border-radius: 16px;
+            background: #f5f8ee;
+            min-height: 198px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 18px;
+            position: relative;
+            overflow: hidden
+        }
+
+        .drop.drag {
+            border-color: var(--green);
+            background: #eaf4dc
+        }
+
+        .preview {
+            max-width: 100%;
+            max-height: 270px;
+            border-radius: 12px;
+            display: none;
+            object-fit: contain
+        }
+
+        .dropcontent {
+            color: var(--muted)
+        }
+
+        .cameraicon {
+            font-size: 33px;
+            display: block;
+            margin-bottom: 7px
+        }
+
+        .dropcontent b {
+            display: block;
+            color: var(--ink);
+            font-size: 15px
+        }
+
+        .dropcontent small {
+            display: block;
+            margin-top: 5px
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+            padding: 12px 16px
+        }
+
+        .btn {
+            border: 0;
+            background: var(--forest);
+            color: #fff;
+            border-radius: 12px;
+            padding: 10px 14px;
+            font-weight: 650;
+            flex: 1
+        }
+
+        .btn.secondary {
+            background: #ebefe6;
+            color: var(--ink)
+        }
+
+        .btn:disabled {
+            opacity: .45;
+            cursor: not-allowed
+        }
+
+        .cropfield {
+            padding: 0 16px 17px
+        }
+
+        .cropfield label {
+            font-size: 12px;
+            color: var(--muted);
+            font-weight: 650;
+            display: block;
+            margin-bottom: 5px
+        }
+
+        .cropfield select,
+        .field input,
+        .field textarea {
+            width: 100%;
+            border: 1px solid var(--line);
+            border-radius: 11px;
+            padding: 10px 12px;
+            background: white;
+            color: var(--ink);
+            outline-color: #6c9b70
+        }
+
+        .notice {
+            margin: 0 16px 16px;
+            border-radius: 12px;
+            background: #f3f0de;
+            padding: 11px 12px;
+            color: #6a5b2f;
+            font-size: 12px
+        }
+
+        .rightcol {
+            display: grid;
+            gap: 20px
+        }
+
+        .chat {
+            min-height: 510px;
+            display: flex;
+            flex-direction: column
+        }
+
+        .chathead {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--line)
+        }
+
+        .chathead h2 {
+            font-size: 18px;
+            margin: 0
+        }
+
+        .agent {
+            font-size: 12px;
+            color: var(--green);
+            background: #eaf3e1;
+            border-radius: 30px;
+            padding: 6px 10px
+        }
+
+        .log {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 13px;
+            min-height: 270px;
+            max-height: 440px;
+            overflow: auto
+        }
+
+        .bubble {
+            max-width: 88%;
+            border-radius: 15px;
+            padding: 12px 14px;
+            font-size: 14px;
+            white-space: pre-wrap
+        }
+
+        .bot {
+            align-self: flex-start;
+            background: #f0f3e9;
+            border: 1px solid #e5e9df
+        }
+
+        .user {
+            align-self: flex-end;
+            background: var(--forest);
+            color: #fff
+        }
+
+        .bubble strong {
+            display: block;
+            margin-bottom: 5px
+        }
+
+        .note {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 9px
+        }
+
+        .resultitem {
+            border-top: 1px solid #dce4d8;
+            margin-top: 10px;
+            padding-top: 9px
+        }
+
+        .resultitem ul {
+            padding-left: 19px;
+            margin: 5px 0
+        }
+
+        .chips {
+            padding: 0 20px 13px;
+            display: flex;
+            gap: 7px;
+            flex-wrap: wrap
+        }
+
+        .chip {
+            border: 1px solid var(--line);
+            background: white;
+            border-radius: 30px;
+            padding: 7px 10px;
+            color: var(--green);
+            font-size: 12px
+        }
+
+        .composer {
+            display: flex;
+            gap: 9px;
+            padding: 14px 16px 16px;
+            border-top: 1px solid var(--line);
+            margin-top: auto
+        }
+
+        .composer input {
+            flex: 1;
+            min-width: 0;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 11px 13px;
+            background: white;
+            outline-color: #6c9b70
+        }
+
+        .send {
+            border: 0;
+            background: var(--gold);
+            color: #392d14;
+            border-radius: 12px;
+            padding: 0 18px;
+            font-weight: 750
+        }
+
+        .learning {
+            padding: 19px 20px
+        }
+
+        .learnhead {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: start
+        }
+
+        .learnhead h2 {
+            margin: 0;
+            font-size: 18px
+        }
+
+        .tag {
+            font-size: 11px;
+            color: #80621f;
+            background: #f5eccd;
+            border-radius: 30px;
+            padding: 5px 9px
+        }
+
+        .learning p {
+            color: var(--muted);
+            font-size: 13px;
+            margin: 5px 0 14px
+        }
+
+        .formgrid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px
+        }
+
+        .field label {
+            font-size: 12px;
+            font-weight: 650;
+            color: var(--muted);
+            display: block;
+            margin-bottom: 4px
+        }
+
+        .field.wide {
+            grid-column: 1/-1
+        }
+
+        .field textarea {
+            resize: vertical;
+            min-height: 64px
+        }
+
+        .submit {
+            margin-top: 11px;
+            border: 0;
+            background: var(--green);
+            color: white;
+            border-radius: 11px;
+            padding: 10px 14px;
+            font-weight: 700
+        }
+
+        .status {
+            font-size: 12px;
+            margin-left: 9px;
+            color: var(--green)
+        }
+
+        .foot {
+            font-size: 11px;
+            color: var(--muted);
+            text-align: center;
+            margin-top: 22px
+        }
+
+        .warn {
+            color: var(--red)
+        }
+
+        @media(max-width:850px) {
+            header {
+                padding: 0 18px
+            }
+
+            .grid {
+                grid-template-columns: 1fr
+            }
+
+            .scan {
+                order: 1
+            }
+
+            .rightcol {
+                order: 2
+            }
+
+            .intro {
+                align-items: start;
+                flex-direction: column
+            }
+
+            .season {
+                width: 100%
+            }
+
+            .wrap {
+                padding: 25px 16px
+            }
+
+            .chat {
+                min-height: 470px
+            }
+        }
+
+        @media(max-width:520px) {
+            .local {
+                display: none
+            }
+
+            .formgrid {
+                grid-template-columns: 1fr
+            }
+
+            .field.wide {
+                grid-column: auto
+            }
+
+            .drop {
+                min-height: 165px
+            }
+
+            .actions .btn {
+                padding: 10px 8px
+            }
+
+            .chathead {
+                padding: 15px
+            }
+
+            .log {
+                padding: 15px
+            }
+
+            .bubble {
+                max-width: 96%
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="brand">
+            <div class="brandmark">✳</div>
+            <div>AgriVision<small>field companion</small></div>
+        </div>
+        <div class="topright"><span class="local"><i></i>Runs on this server</span><span class="lang">English</span>
+        </div>
+    </header>
+    <main class="wrap">
+        <section class="intro">
+            <div>
+                <div class="eyebrow">Your crop, understood</div>
+                <h1>Good advice starts<br>with a closer look.</h1>
+                <p>Ask about crop problems, find reviewed notes, or share an observation for expert review.</p>
+            </div>
+            <div class="season"><span class="eyebrow">Knowledge library</span><b id="kbCount">Loading…</b><span
+                    class="sub">crop guidance entries</span></div>
+        </section>
+        <section class="grid">
+            <aside class="card scan">
+                <div class="cardhead">
+                    <h2>Plant scan</h2>
+                    <div class="sub">Photo diagnosis becomes available after a model is trained.</div>
+                </div>
+                <div class="drop" id="drop">
+                    <div class="dropcontent" id="dropcontent"><span class="cameraicon">⌕</span><b>Choose a clear plant
+                            photo</b><small>Leaf, fruit or whole plant · JPG or PNG</small></div><img class="preview"
+                        id="preview" alt="Selected plant photo">
+                </div><input id="file" type="file" accept="image/*" hidden>
+                <div class="actions"><button class="btn secondary" id="choose">Choose photo</button><button class="btn"
+                        id="scan" disabled>Scan plant</button></div>
+                <div class="cropfield"><label for="crop">Crop (optional)</label><select id="crop">
+                        <option value="">Not sure yet</option>
+                        <option>Rice</option>
+                        <option>Wheat</option>
+                        <option>Maize</option>
+                        <option>Lentil</option>
+                        <option>Chickpea</option>
+                        <option>Mustard</option>
+                        <option>Potato</option>
+                        <option>Tomato</option>
+                        <option>Brinjal</option>
+                        <option>Chilli</option>
+                        <option>Okra</option>
+                        <option>Cabbage</option>
+                        <option>Onion</option>
+                        <option>Mango</option>
+                        <option>Litchi</option>
+                        <option>Banana</option>
+                        <option>Guava</option>
+                        <option>Sugarcane</option>
+                    </select></div>
+                <div class="notice">No trained photo model is loaded yet. The app will not guess a disease from image
+                    color.</div>
+            </aside>
+            <div class="rightcol">
+                <section class="card chat">
+                    <div class="chathead">
+                        <div>
+                            <h2>Ask AgriVision</h2><span class="sub">Answers are retrieved from the crop notes</span>
+                        </div><span class="agent">Knowledge search</span>
+                    </div>
+                    <div class="log" id="log">
+                        <div class="bubble bot"><strong>Namaste. What are you seeing in your field?</strong>Try a crop
+                            and symptom, such as “rice leaves have brown diamond spots.” I’ll show matching notes when I
+                            find them.<div class="note">The generative model is not trained yet. This prototype displays
+                                matched knowledge, not a generated diagnosis.</div>
+                        </div>
+                    </div>
+                    <div class="chips"><button class="chip">Rice blast</button><button class="chip">Yellow rust in
+                            wheat</button><button class="chip">How to prevent pod borer?</button></div>
+                    <form class="composer" id="chatForm"><input id="question" placeholder="Ask about a crop or symptom…"
+                            autocomplete="off" required><button class="send">Send</button></form>
+                </section>
+                <section class="card learning">
+                    <div class="learnhead">
+                        <div>
+                            <h2>Share a field observation</h2>
+                            <div class="sub">Help improve the knowledge library</div>
+                        </div><span class="tag">Expert review required</span>
+                    </div>
+                    <p>Your submission is saved as a suggestion. It will not become advice automatically.</p>
+                    <form id="contribution">
+                        <div class="formgrid">
+                            <div class="field"><label for="ccrop">Crop</label><input id="ccrop" required
+                                    placeholder="e.g. rice"></div>
+                            <div class="field"><label for="problem">Problem observed</label><input id="problem" required
+                                    placeholder="e.g. leaf spots"></div>
+                            <div class="field wide"><label for="observation">What did you observe?</label><textarea
+                                    id="observation" required
+                                    placeholder="Describe symptoms, plant stage and field conditions"></textarea></div>
+                            <div class="field wide"><label for="advice">Your suggested advice</label><textarea
+                                    id="advice" required
+                                    placeholder="Share what worked or which source supports it"></textarea></div>
+                            <div class="field wide"><label for="source">Source or reference</label><input id="source"
+                                    required placeholder="KVK, agriculture university, field experience…"></div>
+                        </div><button class="submit">Submit for review</button><span class="status" id="contribStatus"
+                            aria-live="polite"></span>
+                    </form>
+                </section>
+            </div>
+        </section>
+        <div class="foot">For learning and field support only. Confirm diagnosis and treatment with your local KVK
+            before acting.</div>
+    </main>
+    <script>
+        const $ = id => document.getElementById(id), log = $('log'); let photo = null;
+        function addBubble(text, kind = 'bot', items = []) { const b = document.createElement('div'); b.className = 'bubble ' + kind; b.textContent = text; if (items.length) { for (const item of items) { const box = document.createElement('div'); box.className = 'resultitem'; const title = document.createElement('strong'); title.textContent = item.title; box.append(title); for (const [label, arr] of [['Treatment notes', item.treatment], ['Prevention', item.prevention], ['Quality tips', item.quality]]) if (arr?.length) { const h = document.createElement('div'); h.className = 'note'; h.textContent = label; box.append(h); const ul = document.createElement('ul'); for (const x of arr) { const li = document.createElement('li'); li.textContent = x; ul.append(li) } box.append(ul) } const source = document.createElement('div'); source.className = 'note'; source.textContent = 'Source: ' + item.source; box.append(source); b.append(box) } } log.append(b); log.scrollTop = log.scrollHeight }
+        async function refresh() { try { const r = await fetch('/api/health'); const j = await r.json(); $('kbCount').textContent = j.knowledge_entries + ' entries' } catch { $('kbCount').textContent = 'Server offline' } }
+        async function ask(text) { if (!text.trim()) return; addBubble(text, 'user'); $('question').value = ''; try { const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, crop: $('crop').value || null, language: 'en' }) }); const j = await r.json(); addBubble(j.message, 'bot', j.matches || []) } catch { addBubble('Could not reach the local AgriVision server. Start the app and try again.') } }
+        $('chatForm').addEventListener('submit', e => { e.preventDefault(); ask($('question').value) }); document.querySelectorAll('.chip').forEach(b => b.onclick = () => ask(b.textContent));
+        $('choose').onclick = () => $('file').click(); $('drop').onclick = e => { if (e.target.id !== 'preview') $('file').click() }; $('file').onchange = e => { const f = e.target.files[0]; if (!f) return; photo = f; const u = URL.createObjectURL(f); $('preview').src = u; $('preview').style.display = 'block'; $('dropcontent').style.display = 'none'; $('scan').disabled = false }; $('scan').onclick = async () => { try { const r = await fetch('/api/scan', { method: 'POST' }); const j = await r.json(); addBubble(j.detail || 'Photo model not available yet.', 'bot') } catch { addBubble('Could not reach local server.', 'bot') } };
+        for (const ev of ['dragenter', 'dragover']) $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('drag') }); for (const ev of ['dragleave', 'drop']) $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.remove('drag') }); $('drop').addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f && f.type.startsWith('image/')) { $('file').files = e.dataTransfer.files; $('file').dispatchEvent(new Event('change')) } });
+        $('contribution').addEventListener('submit', async e => { e.preventDefault(); const status = $('contribStatus'); status.textContent = 'Saving…'; const data = { crop: $('ccrop').value, problem: $('problem').value, observation: $('observation').value, suggested_advice: $('advice').value, source: $('source').value }; try { const r = await fetch('/api/contributions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Submission failed'); status.textContent = j.message; e.target.reset() } catch (err) { status.textContent = err.message } }
+        ); refresh();
+    </script>
+</body>
+
+</html>
