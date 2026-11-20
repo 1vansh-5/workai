@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from tabular_models import estimate_production, load_model, recommend_crop
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -33,6 +34,28 @@ class Contribution(BaseModel):
     observation: str = Field(min_length=5, max_length=1500)
     suggested_advice: str = Field(min_length=5, max_length=2000)
     source: str = Field(min_length=2, max_length=300)
+
+
+class CropRecommendationInput(BaseModel):
+    N: float = Field(ge=0)
+    P: float = Field(ge=0)
+    K: float = Field(ge=0)
+    temperature: float
+    humidity: float = Field(ge=0, le=100)
+    ph: float = Field(ge=0, le=14)
+    rainfall: float = Field(ge=0)
+
+
+class ProductionInput(BaseModel):
+    State_Name: str = Field(min_length=2, max_length=100)
+    District_Name: str = Field(min_length=2, max_length=100)
+    Crop_Year: int = Field(ge=1997, le=2100)
+    Season: str = Field(min_length=2, max_length=40)
+    Crop: str = Field(min_length=2, max_length=100)
+    Temperature: float
+    Humidity: float = Field(ge=0, le=100)
+    Soil_Moisture: float = Field(ge=0, le=100)
+    Area: float = Field(gt=0)
 
 
 def load_kb():
@@ -71,7 +94,27 @@ def index():
 @app.get("/api/health")
 def health():
     return {"status": "running", "knowledge_entries": len(load_kb()),
-            "generative_model": "not trained / not loaded", "scan_model": "not trained / not loaded"}
+            "generative_model": "not trained / not loaded", "scan_model": "not trained / not loaded",
+            "crop_recommender": "ready" if load_model("crop_recommender.joblib") else "not trained",
+            "production_estimator": "ready" if load_model("production_estimator.joblib") else "not trained"}
+
+
+@app.post("/api/recommend-crop")
+def recommend_crop_endpoint(req: CropRecommendationInput):
+    result = recommend_crop(req.model_dump(), top_n=3)
+    if result is None:
+        raise HTTPException(status_code=503, detail="Crop recommender is not trained. Run training/train_tabular_models.py first.")
+    return {"recommendations": result,
+            "note": "Ranking from the supplied crop recommendation dataset. Scores are model scores, not guaranteed probabilities of success. The CSV does not document measurement units; enter matching values."}
+
+
+@app.post("/api/predict-production")
+def predict_production_endpoint(req: ProductionInput):
+    result = estimate_production(req.model_dump())
+    if result is None:
+        raise HTTPException(status_code=503, detail="Production estimator is not trained. Run training/train_tabular_models.py first.")
+    return {**result,
+            "note": "Estimate based on historical records from 1997–2014 in 7 states. The CSV does not document production or area units. Treat this as an experimental estimate, not a yield guarantee."}
 
 
 @app.post("/api/chat")
