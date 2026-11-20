@@ -1,54 +1,58 @@
-# AgriVision local starter
+# AgriVision local project
 
-This is a complete, local-first project folder with a designed web page, a FastAPI server, the linked project's crop notes, a reviewed-contribution queue, and the random-initialization photo-model training baseline.
+This folder contains the designed local web app, its crop knowledge search, reviewed user-submission queue, two trained tabular machine-learning models, and the datasets used to train them.
 
-## What works now
+## New trained models
 
-- Search the current crop notes and show the matched treatment, prevention and quality notes.
-- Submit farmer observations into a pending queue.
-- Review suggested entries interactively with `review_contributions.py`; only approved, rewritten notes enter `data/knowledge.json`.
-- Use the designed photo-picker interface. The scan endpoint deliberately reports that no trained image model is loaded instead of guessing.
-- Validate a photo manifest and train a small image classifier from random weights after expert-labeled data is collected.
+- **Crop recommender:** a random forest classifier trained from random initialization on `data/training/crop_recommendation.csv` (2,200 rows, 22 crop labels). It returns the three highest-scoring crop matches from soil/weather measurements.
+- **Historical production estimator:** a random forest regressor trained from random initialization on `data/training/crop_production.csv` (49,784 usable rows). It estimates historical production from location, year, season, crop, weather, soil moisture and area.
+- Training results and the exact data split are recorded in `data/models/training_report.json`.
 
-## What is not included
+The crop recommender's held-out random 20% accuracy was 99.3% and top-three accuracy was 100%. The compact production model (60 trees, depth limited to 18) was trained on 1997–2013 and evaluated on 2014: R² was 0.865, median absolute error was about 193 dataset units, and mean absolute error was about 251,238 dataset units. This large difference reflects a highly skewed production target and outliers; do not interpret the R² as a guarantee for a particular farm. The source CSVs do not document measurement or production units. Keep the same conventions as the source data.
 
-There is no trained model in this package. The chat is knowledge retrieval, not natural language generation. The training code covers a starter image classifier only; it does not train a language model. A credible from-scratch chat model requires a large, licensed text corpus, expert-reviewed instruction data and GPU compute. Do not present this prototype as a diagnosis system.
+These are supervised tabular models, not a general language model. The crop files contain no leaf images or disease labels. Therefore, the photo scanner remains unavailable, and chat searches the included knowledge notes rather than generating free-form diagnoses. User submissions are saved for human review; they do not automatically retrain the models or become advice.
 
 ## Run locally
 
-Use Python 3.10 or newer:
+Requires Python 3.10 or newer.
 
 ```bash
 python -m venv .venv
 # Windows PowerShell: .venv\Scripts\Activate.ps1
 # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app:app --reload
+uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8000`. The app stores farmer submissions in `data/pending_contributions.jsonl`. Review them on the same machine with:
+Open `http://127.0.0.1:8000`. Both trained model files are under `data/models/`; the app loads them locally and does not call a hosted AI service. This is the local demonstration setup, not a hardened public production service.
+
+## Retrain the tabular models
+
+Keep the CSVs at the paths under `data/training/`, install `requirements.txt`, then run:
 
 ```bash
-python review_contributions.py
+python training/train_tabular_models.py
 ```
 
-The review utility updates the local JSON knowledge file; keep a backup and have a qualified agronomy reviewer approve any treatment advice. This starter is intended for local development. Add authentication, HTTPS, rate limits, data retention and privacy protections before hosting it for public use.
+The script overwrites the two model artifacts and training report. Crop recommendation uses a stratified 80/20 split. Production estimation keeps 2014 out of training and uses it as a time-based holdout.
 
-## Train the photo model when data is ready
+## APIs
 
-Put images under a data folder and complete `training/image_cases_template.csv`. Only expert-approved rows are used. The `split` column must be grouped by farm/plant/outbreak to prevent leakage.
+- `POST /api/recommend-crop` accepts `N`, `P`, `K`, `temperature`, `humidity`, `ph`, and `rainfall`.
+- `POST /api/predict-production` accepts state, district, year, season, crop, temperature, humidity, soil moisture and area.
+- `POST /api/chat` retrieves matching entries from the local knowledge file.
+- `POST /api/contributions` saves a proposed note for review.
+- `POST /api/scan` returns an explicit unavailable response until a separate expert-labeled image dataset is collected and a vision model is trained.
 
-```bash
-python training/validate_manifest.py --manifest training/image_cases.csv --image-root data
-python training/train_vision.py --manifest training/image_cases.csv --image-root data --output runs/vision-v0 --epochs 25 --batch-size 16
-```
+## Other project functions
 
-The training script selects by validation loss and does not inspect the test split. Its checkpoint is not safe for treatment decisions until a locked, farm-separated evaluation is completed and reviewed.
+- Search the included crop notes and display matching treatment, prevention and quality notes.
+- Submit farmer observations into a pending queue.
+- Review suggestions with `python review_contributions.py`; only approved entries are added to `data/knowledge.json`.
+- Use the photo picker interface, which clearly says when no trained image model is loaded.
 
-## Put it in your GitHub repository
+## Publishing
 
-Copy the contents of this folder into the root of your repository. Keep your existing project in a backup or separate branch first. Then review the changes, commit, and push from your own GitHub setup. Do not commit private farmer photos or contact details.
+The two CSVs were supplied for this project. Check their source, license and attribution requirements before publishing the CSVs or trained artifacts in a public repository. Do not commit private farmer photos or contact details. The starter app also needs authentication, HTTPS, rate limits and data-retention controls before public deployment.
 
-## Data and advice provenance
-
-`data/knowledge.json` was copied from the linked AgriVision repository. Have a local agronomist/KVK review it before field use. Public repository: https://github.com/1vansh-5/Agrivision-Ai-major-pro
+The knowledge file came from the linked project: https://github.com/1vansh-5/Agrivision-Ai-major-pro. Have a qualified local agronomist or KVK review advice before field use.
