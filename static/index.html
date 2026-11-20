@@ -546,6 +546,10 @@
             .chat {
                 min-height: 470px
             }
+
+            .models {
+                grid-template-columns: 1fr
+            }
         }
 
         @media(max-width:520px) {
@@ -687,6 +691,56 @@
                 </section>
             </div>
         </section>
+        <section class="models"
+            style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:20px;margin-top:20px">
+            <section class="card learning">
+                <h2>Crop recommendation</h2>
+                <p>Enter soil and weather values to get the closest crop matches learned from your dataset. Use the
+                    source dataset’s measurement conventions.</p>
+                <form id="recommendForm">
+                    <div class="formgrid">
+                        <div class="field"><label>Nitrogen (N)</label><input id="recN" type="number" step="any" min="0"
+                                required value="90"></div>
+                        <div class="field"><label>Phosphorus (P)</label><input id="recP" type="number" step="any"
+                                min="0" required value="42"></div>
+                        <div class="field"><label>Potassium (K)</label><input id="recK" type="number" step="any" min="0"
+                                required value="43"></div>
+                        <div class="field"><label>Temperature</label><input id="recTemp" type="number" step="any"
+                                required value="25"></div>
+                        <div class="field"><label>Humidity (%)</label><input id="recHumidity" type="number" step="any"
+                                min="0" max="100" required value="80"></div>
+                        <div class="field"><label>pH</label><input id="recPh" type="number" step="any" min="0" max="14"
+                                required value="6.5"></div>
+                        <div class="field wide"><label>Rainfall</label><input id="recRain" type="number" step="any"
+                                min="0" required value="200"></div>
+                    </div><button class="submit">Get crop matches</button>
+                </form>
+                <div class="notice" id="recommendResult" aria-live="polite">Results appear here.</div>
+            </section>
+            <section class="card learning">
+                <h2>Historical production estimate</h2>
+                <p>Experimental estimate. Area and production units are not documented in the CSV.</p>
+                <form id="productionForm">
+                    <div class="formgrid">
+                        <div class="field"><label>State</label><input id="prodState" required value="Bihar"></div>
+                        <div class="field"><label>District</label><input id="prodDistrict" required value="Patna"></div>
+                        <div class="field"><label>Crop year</label><input id="prodYear" type="number" min="1997"
+                                max="2100" required value="2014"></div>
+                        <div class="field"><label>Season</label><input id="prodSeason" required value="Kharif"></div>
+                        <div class="field"><label>Crop</label><input id="prodCrop" required value="Rice"></div>
+                        <div class="field"><label>Area (dataset units)</label><input id="prodArea" type="number"
+                                min="0.001" step="any" required value="100"></div>
+                        <div class="field"><label>Temperature</label><input id="prodTemp" type="number" step="any"
+                                required value="30"></div>
+                        <div class="field"><label>Humidity (%)</label><input id="prodHumidity" type="number" min="0"
+                                max="100" step="any" required value="60"></div>
+                        <div class="field wide"><label>Soil moisture</label><input id="prodMoisture" type="number"
+                                min="0" max="100" step="any" required value="52"></div>
+                    </div><button class="submit">Estimate production</button>
+                </form>
+                <div class="notice" id="productionResult" aria-live="polite">Not a yield guarantee.</div>
+            </section>
+        </section>
         <div class="foot">For learning and field support only. Confirm diagnosis and treatment with your local KVK
             before acting.</div>
     </main>
@@ -700,6 +754,8 @@
         for (const ev of ['dragenter', 'dragover']) $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('drag') }); for (const ev of ['dragleave', 'drop']) $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.remove('drag') }); $('drop').addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f && f.type.startsWith('image/')) { $('file').files = e.dataTransfer.files; $('file').dispatchEvent(new Event('change')) } });
         $('contribution').addEventListener('submit', async e => { e.preventDefault(); const status = $('contribStatus'); status.textContent = 'Saving…'; const data = { crop: $('ccrop').value, problem: $('problem').value, observation: $('observation').value, suggested_advice: $('advice').value, source: $('source').value }; try { const r = await fetch('/api/contributions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Submission failed'); status.textContent = j.message; e.target.reset() } catch (err) { status.textContent = err.message } }
         ); refresh();
+        $('recommendForm').addEventListener('submit', async e => { e.preventDefault(); const data = { N: +$('recN').value, P: +$('recP').value, K: +$('recK').value, temperature: +$('recTemp').value, humidity: +$('recHumidity').value, ph: +$('recPh').value, rainfall: +$('recRain').value }, out = $('recommendResult'); out.textContent = 'Finding matches…'; try { const r = await fetch('/api/recommend-crop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }), j = await r.json(); if (!r.ok) throw Error(j.detail || 'Request failed'); out.textContent = j.recommendations.map((x, i) => `${i + 1}. ${x.crop} — ${(x.probability * 100).toFixed(1)}% model score`).join('\n') + '\n\n' + j.note } catch (err) { out.textContent = err.message } });
+        $('productionForm').addEventListener('submit', async e => { e.preventDefault(); const data = { State_Name: $('prodState').value, District_Name: $('prodDistrict').value, Crop_Year: +$('prodYear').value, Season: $('prodSeason').value, Crop: $('prodCrop').value, Temperature: +$('prodTemp').value, Humidity: +$('prodHumidity').value, Soil_Moisture: +$('prodMoisture').value, Area: +$('prodArea').value }, out = $('productionResult'); out.textContent = 'Estimating…'; try { const r = await fetch('/api/predict-production', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }), j = await r.json(); if (!r.ok) throw Error(j.detail || 'Request failed'); out.textContent = `Estimated production: ${Number(j.estimated_production).toLocaleString()} ${j.unit}\n\n${j.note}` } catch (err) { out.textContent = err.message } });
     </script>
 </body>
 
