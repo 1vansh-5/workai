@@ -1,58 +1,76 @@
-# AgriVision local project
+# AgriVision training starter (from random initialization)
 
-This folder contains the designed local web app, its crop knowledge search, reviewed user-submission queue, two trained tabular machine-learning models, and the datasets used to train them.
+This folder contains a first, deliberately small image-classification training pipeline. The CNN weights start randomly; no pretrained model or external AI service is used.
 
-## New trained models
+It is **not a trained model** and is not suitable for farmer diagnosis yet. It only becomes useful after you collect and expert-review enough field images. It does not train the language/chat model; that needs a separate, licensed text corpus and reviewed Q&A set.
 
-- **Crop recommender:** a random forest classifier trained from random initialization on `data/training/crop_recommendation.csv` (2,200 rows, 22 crop labels). It returns the three highest-scoring crop matches from soil/weather measurements.
-- **Historical production estimator:** a random forest regressor trained from random initialization on `data/training/crop_production.csv` (49,784 usable rows). It estimates historical production from location, year, season, crop, weather, soil moisture and area.
-- Training results and the exact data split are recorded in `data/models/training_report.json`.
+## Setup
 
-The crop recommender's held-out random 20% accuracy was 99.3% and top-three accuracy was 100%. The compact production model (60 trees, depth limited to 18) was trained on 1997–2013 and evaluated on 2014: R² was 0.865, median absolute error was about 193 dataset units, and mean absolute error was about 251,238 dataset units. This large difference reflects a highly skewed production target and outliers; do not interpret the R² as a guarantee for a particular farm. The source CSVs do not document measurement or production units. Keep the same conventions as the source data.
-
-These are supervised tabular models, not a general language model. The crop files contain no leaf images or disease labels. Therefore, the photo scanner remains unavailable, and chat searches the included knowledge notes rather than generating free-form diagnoses. User submissions are saved for human review; they do not automatically retrain the models or become advice.
-
-## Run locally
-
-Requires Python 3.10 or newer.
+Use Python 3.10 or newer, then install:
 
 ```bash
 python -m venv .venv
-# Windows PowerShell: .venv\Scripts\Activate.ps1
-# macOS/Linux: source .venv/bin/activate
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8000`. Both trained model files are under `data/models/`; the app loads them locally and does not call a hosted AI service. This is the local demonstration setup, not a hardened public production service.
+Install the PyTorch build suited to your computer from the official PyTorch install selector if the basic install does not detect your GPU. The pipeline also runs on CPU for small experiments, but training may be slow.
 
-## Retrain the tabular models
+## Data layout
 
-Keep the CSVs at the paths under `data/training/`, install `requirements.txt`, then run:
+Use the `image_cases_template.csv` from the data collection pack as the manifest. Keep image files in a data directory and set `relative_path` to a path under it, for example:
+
+```text
+data/
+  images/
+    case001_leaf.jpg
+  image_cases.csv
+```
+
+In the CSV, `relative_path` would be `images/case001_leaf.jpg`. Set `review_status` to `approved` only after expert review. Set `split` to `train`, `val`, or `test` after grouping every photo from the same plant/farm visit/outbreak together. Keep a locked test set from unseen farms; do not tune on it.
+
+Use specific labels, including `healthy`, `unknown`, and `not_enough_evidence`. Do not relabel uncertainty as a disease. The classifier treats `crop_common` plus `condition_label` as one class, e.g. `rice::blast`.
+
+## Check the manifest
+
+For the ICAR folder layout (`Rice`/`Maize`, then `Healthy`, `Disease`, or
+`Insect-pests`), generate a starting manifest from the dataset folders:
+
+```powershell
+python build_folder_manifest.py --image-root "C:\Users\tripa\OneDrive\Desktop\aidata" --output "C:\Users\tripa\OneDrive\Desktop\aidata\image_cases.csv"
+```
+
+The generator keeps disease and pest subfolders as separate labels and uses a
+seeded per-label split (70/15/15 when there are enough examples). It defaults
+all records to `pending`, so the training script will intentionally skip them.
+Review the folder-derived labels and ICAR data-use terms, then change
+`review_status` to `approved` only for labels you have verified. If you know
+that photos show the same plant or field visit, give them a shared `group_id`
+and keep that group in one split; the folder layout does not provide that
+identity, so the generated per-image IDs cannot detect duplicate or related
+photos across splits.
 
 ```bash
-python training/train_tabular_models.py
+python validate_manifest.py --manifest data/image_cases.csv --image-root data
 ```
 
-The script overwrites the two model artifacts and training report. Crop recommendation uses a stratified 80/20 split. Production estimation keeps 2014 out of training and uses it as a time-based holdout.
+Fix all errors before training. Warnings about small classes are expected early on. Group leakage is an error: the same `group_id` cannot occur in multiple splits.
 
-## APIs
+## Train the vision baseline
 
-- `POST /api/recommend-crop` accepts `N`, `P`, `K`, `temperature`, `humidity`, `ph`, and `rainfall`.
-- `POST /api/predict-production` accepts state, district, year, season, crop, temperature, humidity, soil moisture and area.
-- `POST /api/chat` retrieves matching entries from the local knowledge file.
-- `POST /api/contributions` saves a proposed note for review.
-- `POST /api/scan` returns an explicit unavailable response until a separate expert-labeled image dataset is collected and a vision model is trained.
+```bash
+python train_vision.py --manifest data/image_cases.csv --image-root data --output runs/vision-v0 --epochs 25 --batch-size 16 --image-size 224
+```
 
-## Other project functions
+The script trains only rows marked `approved` and uses their predefined `train` and `val` splits. It does not use the test split to choose a model. It saves the best validation checkpoint and a JSON history file. Evaluate the locked test set only after selecting the model and freezing the code; add a dedicated evaluation script before reporting results to farmers.
 
-- Search the included crop notes and display matching treatment, prevention and quality notes.
-- Submit farmer observations into a pending queue.
-- Review suggestions with `python review_contributions.py`; only approved entries are added to `data/knowledge.json`.
-- Use the photo picker interface, which clearly says when no trained image model is loaded.
+## Important limits
 
-## Publishing
-
-The two CSVs were supplied for this project. Check their source, license and attribution requirements before publishing the CSVs or trained artifacts in a public repository. Do not commit private farmer photos or contact details. The starter app also needs authentication, HTTPS, rate limits and data-retention controls before public deployment.
-
-The knowledge file came from the linked project: https://github.com/1vansh-5/Agrivision-Ai-major-pro. Have a qualified local agronomist or KVK review advice before field use.
+- This is a learning baseline, not a diagnosis product. A small dataset may simply be memorized.
+- Image labels should be confirmed by qualified agronomy reviewers. Keep disagreements and ambiguous cases explicit.
+- A classifier only predicts among labels it was trained on; it cannot safely handle arbitrary unseen problems. Do not use its output for pesticide decisions.
+- A photo classifier does not answer general farming questions. The chat agent needs a separately trained language model and should retrieve the current vetted knowledge base for every answer.
+- Never report training accuracy as real-world accuracy. Use a locked, farm-separated field test and publish per-class results and abstention behavior.
