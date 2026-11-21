@@ -1,76 +1,81 @@
-# AgriVision training starter (from random initialization)
+# AgriVision local project
 
-This folder contains a first, deliberately small image-classification training pipeline. The CNN weights start randomly; no pretrained model or external AI service is used.
+This folder contains the designed local web app, crop knowledge search, reviewed user-submission queue, two trained tabular models, and the user's from-scratch rice/maize photo classifier checkpoint.
 
-It is **not a trained model** and is not suitable for farmer diagnosis yet. It only becomes useful after you collect and expert-review enough field images. It does not train the language/chat model; that needs a separate, licensed text corpus and reviewed Q&A set.
+## New trained models
 
-## Setup
+- **Crop recommender:** a random forest classifier trained from random initialization on `data/training/crop_recommendation.csv` (2,200 rows, 22 crop labels). It returns the three highest-scoring crop matches from soil/weather measurements.
+- **Historical production estimator:** a random forest regressor trained from random initialization on `data/training/crop_production.csv` (49,784 usable rows). It estimates historical production from location, year, season, crop, weather, soil moisture and area.
+- Training results and the exact data split are recorded in `data/models/training_report.json`.
 
-Use Python 3.10 or newer, then install:
+The crop recommender's held-out random 20% accuracy was 99.3% and top-three accuracy was 100%. The compact production model (60 trees, depth limited to 18) was trained on 1997–2013 and evaluated on 2014: R² was 0.865, median absolute error was about 193 dataset units, and mean absolute error was about 251,238 dataset units. This large difference reflects a highly skewed production target and outliers; do not interpret the R² as a guarantee for a particular farm. The source CSVs do not document measurement or production units. Keep the same conventions as the source data.
+
+The photo classifier was trained from random initialization using 852 images in 17 Rice/Maize labels. Its best-validation-loss checkpoint reached 47.9% accuracy on the 119-image validation split (peak shown during training was 50.4%); the held-out test split has not been evaluated. Treat photo predictions as an early demonstration, not as reliable diagnosis. It only supports Rice and Maize labels. Image scanning now retrieves same-crop, condition-matched notes and displays available causes, management, prevention, and source metadata. It will say when no matching note or cause is recorded instead of inventing one. The existing notes do not yet cover every image class or include all causes/source citations. These models are not a general language model, and chat searches the included knowledge notes rather than generating free-form diagnoses. User submissions are saved for human review; they do not automatically retrain the models or become advice.
+
+## Run locally
+
+Requires Python 3.10 or newer.
 
 ```bash
 python -m venv .venv
-# Windows:
-.venv\Scripts\activate
-# macOS/Linux:
-source .venv/bin/activate
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+# macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
+uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
-Install the PyTorch build suited to your computer from the official PyTorch install selector if the basic install does not detect your GPU. The pipeline also runs on CPU for small experiments, but training may be slow.
+Open `http://127.0.0.1:8000`. The tabular models and `data/models/plant_disease_cnn.pt` are loaded locally; photo uploads are sent to `/api/scan`. The photo model runs on CPU by default. This is a local demonstration setup, not a hardened public production service.
 
-## Data layout
+## Retrain the tabular models
 
-Use the `image_cases_template.csv` from the data collection pack as the manifest. Keep image files in a data directory and set `relative_path` to a path under it, for example:
-
-```text
-data/
-  images/
-    case001_leaf.jpg
-  image_cases.csv
-```
-
-In the CSV, `relative_path` would be `images/case001_leaf.jpg`. Set `review_status` to `approved` only after expert review. Set `split` to `train`, `val`, or `test` after grouping every photo from the same plant/farm visit/outbreak together. Keep a locked test set from unseen farms; do not tune on it.
-
-Use specific labels, including `healthy`, `unknown`, and `not_enough_evidence`. Do not relabel uncertainty as a disease. The classifier treats `crop_common` plus `condition_label` as one class, e.g. `rice::blast`.
-
-## Check the manifest
-
-For the ICAR folder layout (`Rice`/`Maize`, then `Healthy`, `Disease`, or
-`Insect-pests`), generate a starting manifest from the dataset folders:
-
-```powershell
-python build_folder_manifest.py --image-root "C:\Users\tripa\OneDrive\Desktop\aidata" --output "C:\Users\tripa\OneDrive\Desktop\aidata\image_cases.csv"
-```
-
-The generator keeps disease and pest subfolders as separate labels and uses a
-seeded per-label split (70/15/15 when there are enough examples). It defaults
-all records to `pending`, so the training script will intentionally skip them.
-Review the folder-derived labels and ICAR data-use terms, then change
-`review_status` to `approved` only for labels you have verified. If you know
-that photos show the same plant or field visit, give them a shared `group_id`
-and keep that group in one split; the folder layout does not provide that
-identity, so the generated per-image IDs cannot detect duplicate or related
-photos across splits.
+Keep the CSVs at the paths under `data/training/`, install `requirements.txt`, then run:
 
 ```bash
-python validate_manifest.py --manifest data/image_cases.csv --image-root data
+python training/train_tabular_models.py
 ```
 
-Fix all errors before training. Warnings about small classes are expected early on. Group leakage is an error: the same `group_id` cannot occur in multiple splits.
+The script overwrites the two model artifacts and training report. Crop recommendation uses a stratified 80/20 split. Production estimation keeps 2014 out of training and uses it as a time-based holdout.
 
-## Train the vision baseline
+## APIs
 
-```bash
-python train_vision.py --manifest data/image_cases.csv --image-root data --output runs/vision-v0 --epochs 25 --batch-size 16 --image-size 224
-```
+- `POST /api/recommend-crop` accepts `N`, `P`, `K`, `temperature`, `humidity`, `ph`, and `rainfall`.
+- `POST /api/predict-production` accepts state, district, year, season, crop, temperature, humidity, soil moisture and area.
+- `POST /api/chat` retrieves matching entries from the local knowledge file and, when configured, relevant rice/maize KCC Q&A.
+- `POST /api/contributions` saves a proposed note for review.
+- `POST /api/scan` returns an explicit unavailable response until a separate expert-labeled image dataset is collected and a vision model is trained.
 
-The script trains only rows marked `approved` and uses their predefined `train` and `val` splits. It does not use the test split to choose a model. It saves the best validation checkpoint and a JSON history file. Evaluate the locked test set only after selecting the model and freezing the code; add a dedicated evaluation script before reporting results to farmers.
+## Other project functions
 
-## Important limits
+- Search the included crop notes and display matching treatment, prevention and quality notes.
+- Submit farmer observations into a pending queue.
+- Review suggestions with `python review_contributions.py`; only approved entries are added to `data/knowledge.json`.
+- Upload Rice or Maize photos to get the classifier's top matches and any matching knowledge-base notes or KCC Q&A.
 
-- This is a learning baseline, not a diagnosis product. A small dataset may simply be memorized.
-- Image labels should be confirmed by qualified agronomy reviewers. Keep disagreements and ambiguous cases explicit.
-- A classifier only predicts among labels it was trained on; it cannot safely handle arbitrary unseen problems. Do not use its output for pesticide decisions.
-- A photo classifier does not answer general farming questions. The chat agent needs a separately trained language model and should retrieve the current vetted knowledge base for every answer.
-- Never report training accuracy as real-world accuracy. Use a locked, farm-separated field test and publish per-class results and abstention behavior.
+## Connect Kisan Call Centre (KCC) answers
+
+The backend can optionally retrieve a bounded, crop-filtered sample of KCC Q&A
+records from data.gov.in for chat and image scans. It uses resource ID
+`cef25fe2-9231-4128-8aec-2c948fedd43f`, filters to Rice or Maize, and keeps a
+one-hour in-memory cache per crop. If the key is absent or the API is
+unavailable, local knowledge-base search continues to work.
+
+In Render, add the environment variable `DATA_GOV_IN_API_KEY` with your private
+data.gov.in key. Optionally set `DATA_GOV_IN_RESOURCE_ID` if the official API
+details page provides a different resource ID. Never place the key in
+`static/index.html`, a committed file, or a public URL. The API page checks the
+key server-side in `app.py`; the browser only calls this app's `/api/chat` and
+`/api/scan` endpoints.
+
+KCC results are historical answers. The page shows their source, date and
+available region; review treatment advice against current local guidance before
+acting. This integration does not train the image model or a language model.
+
+## Extend the crop knowledge notes
+
+Each object in `data/knowledge.json` can include the existing fields `c` (crop aliases), `k` (search terms), `n` (condition title), `cure`, `prev`, and `q`, plus `cause`, `source`, `region`, `updated`, and `reviewed_by`. Add concise, crop-specific, expert-reviewed notes and include the original source and review date. The image scanner only attaches a note when both crop and condition match; it does not turn a model label into a cause by itself.
+
+## Publishing
+
+The two CSVs were supplied for this project. Check their source, license and attribution requirements before publishing the CSVs or trained artifacts in a public repository. Do not commit private farmer photos or contact details. The starter app also needs authentication, HTTPS, rate limits and data-retention controls before public deployment.
+
+The knowledge file came from the linked project: https://github.com/1vansh-5/Agrivision-Ai-major-pro. Have a qualified local agronomist or KVK review advice before field use.
