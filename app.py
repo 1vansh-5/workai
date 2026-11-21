@@ -93,30 +93,28 @@ def words(text):
 
 
 def retrieve(message, crop=None, limit=4):
-    query = words(f"{message} {crop or ''}")
+    """Find notes matching symptom words; use crop only as a filter."""
+    query = words(message) - words(crop or "")
     ranked = []
 
     for entry in load_kb():
         aliases = [str(value).lower() for value in entry.get("c", [])]
-        keys = [str(value).lower() for value in entry.get("k", [])]
-        name = str(entry.get("n", ""))
 
-        score = 2 * len(query & words(" ".join([name, *keys, *aliases])))
-
-        if crop and any(
+        # Restrict results to the selected crop without awarding a match
+        # merely because the note and request mention the same crop.
+        if crop and not any(
             crop.lower() == alias
             or crop.lower() in alias
             or alias in crop.lower()
             for alias in aliases
         ):
-            score += 5
+            continue
 
-        score += sum(
-            4 for key in keys
-            if len(key) > 2 and key in message.lower()
-        )
+        keys = [str(value).lower() for value in entry.get("k", [])]
+        name = str(entry.get("n", ""))
+        score = len(query & words(" ".join([name, *keys])))
 
-        if score:
+        if score > 0:
             ranked.append((score, entry))
 
     ranked.sort(key=lambda item: item[0], reverse=True)
@@ -176,13 +174,12 @@ def fetch_kcc_records(crop):
             payload = json.loads(response.read().decode("utf-8"))
 
     except HTTPError as exc:
-        # HTTP 401/403 can indicate an invalid key or access problem.
         KCC_STATUS.update(status=f"http_error:{exc.code}", records=0)
         LOGGER.warning("KCC API returned HTTP %s", exc.code)
         return cached[1] if cached else []
 
     except URLError as exc:
-        # Log the connection reason, never the request URL or API key.
+        # Do not log the request URL because it contains the API key.
         reason = getattr(exc, "reason", exc)
         KCC_STATUS.update(
             status=f"connection_error:{type(reason).__name__}",
@@ -316,7 +313,7 @@ def retrieve_for_prediction(crop, condition, limit=2):
             default=0,
         )
 
-        # Avoid attaching advice based on a vague shared word such as "blight".
+        # Avoid matching on a vague shared word such as "blight".
         score = 100 if exact else overlap
 
         if score >= 2:
