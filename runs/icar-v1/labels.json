@@ -1,0 +1,19 @@
+{
+  "Maize::FAW symptoms": 0,
+  "Maize::Healthy": 1,
+  "Maize::aphid": 2,
+  "Maize::curvularia leaf spot": 3,
+  "Maize::fall armyworm": 4,
+  "Maize::maydis leaf blight": 5,
+  "Maize::sorghum downy mildew": 6,
+  "Maize::turcicum leaf blight": 7,
+  "Rice::Bacterial leaf blight": 8,
+  "Rice::Brown spot": 9,
+  "Rice::False smut": 10,
+  "Rice::Healthy": 11,
+  "Rice::Leaf folder": 12,
+  "Rice::Rice skipper": 13,
+  "Rice::White stem borer": 14,
+  "Rice::Yellow stem borer": 15,
+  "Rice::leaf sheath blight": 16
+}

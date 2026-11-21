@@ -611,7 +611,7 @@
             <aside class="card scan">
                 <div class="cardhead">
                     <h2>Plant scan</h2>
-                    <div class="sub">Photo diagnosis becomes available after a model is trained.</div>
+                    <div class="sub">Experimental image classifier for rice and maize.</div>
                 </div>
                 <div class="drop" id="drop">
                     <div class="dropcontent" id="dropcontent"><span class="cameraicon">⌕</span><b>Choose a clear plant
@@ -620,29 +620,13 @@
                 </div><input id="file" type="file" accept="image/*" hidden>
                 <div class="actions"><button class="btn secondary" id="choose">Choose photo</button><button class="btn"
                         id="scan" disabled>Scan plant</button></div>
-                <div class="cropfield"><label for="crop">Crop (optional)</label><select id="crop">
+                <div class="cropfield"><label for="crop">Crop (optional: Rice or Maize)</label><select id="crop">
                         <option value="">Not sure yet</option>
                         <option>Rice</option>
-                        <option>Wheat</option>
                         <option>Maize</option>
-                        <option>Lentil</option>
-                        <option>Chickpea</option>
-                        <option>Mustard</option>
-                        <option>Potato</option>
-                        <option>Tomato</option>
-                        <option>Brinjal</option>
-                        <option>Chilli</option>
-                        <option>Okra</option>
-                        <option>Cabbage</option>
-                        <option>Onion</option>
-                        <option>Mango</option>
-                        <option>Litchi</option>
-                        <option>Banana</option>
-                        <option>Guava</option>
-                        <option>Sugarcane</option>
                     </select></div>
-                <div class="notice">No trained photo model is loaded yet. The app will not guess a disease from image
-                    color.</div>
+                <div class="notice">Research demo only: the current validation accuracy was about 48% on a small
+                    dataset. Confirm results with a qualified local expert.</div>
             </aside>
             <div class="rightcol">
                 <section class="card chat">
@@ -750,7 +734,7 @@
         async function refresh() { try { const r = await fetch('/api/health'); const j = await r.json(); $('kbCount').textContent = j.knowledge_entries + ' entries' } catch { $('kbCount').textContent = 'Server offline' } }
         async function ask(text) { if (!text.trim()) return; addBubble(text, 'user'); $('question').value = ''; try { const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, crop: $('crop').value || null, language: 'en' }) }); const j = await r.json(); addBubble(j.message, 'bot', j.matches || []) } catch { addBubble('Could not reach the local AgriVision server. Start the app and try again.') } }
         $('chatForm').addEventListener('submit', e => { e.preventDefault(); ask($('question').value) }); document.querySelectorAll('.chip').forEach(b => b.onclick = () => ask(b.textContent));
-        $('choose').onclick = () => $('file').click(); $('drop').onclick = e => { if (e.target.id !== 'preview') $('file').click() }; $('file').onchange = e => { const f = e.target.files[0]; if (!f) return; photo = f; const u = URL.createObjectURL(f); $('preview').src = u; $('preview').style.display = 'block'; $('dropcontent').style.display = 'none'; $('scan').disabled = false }; $('scan').onclick = async () => { try { const r = await fetch('/api/scan', { method: 'POST' }); const j = await r.json(); addBubble(j.detail || 'Photo model not available yet.', 'bot') } catch { addBubble('Could not reach local server.', 'bot') } };
+        $('choose').onclick = () => $('file').click(); $('drop').onclick = e => { if (e.target.id !== 'preview') $('file').click() }; $('file').onchange = e => { const f = e.target.files[0]; if (!f) return; photo = f; const u = URL.createObjectURL(f); $('preview').src = u; $('preview').style.display = 'block'; $('dropcontent').style.display = 'none'; $('scan').disabled = false }; $('scan').onclick = async () => { if (!photo) return; const fd = new FormData(); fd.append('file', photo); if ($('crop').value) fd.append('crop', $('crop').value); $('scan').disabled = true; $('scan').textContent = 'Scanning…'; try { const r = await fetch('/api/scan', { method: 'POST', body: fd }); const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Scan failed'); const lines = j.predictions.map((p, i) => `${i + 1}. ${p.crop}: ${p.condition} — ${(p.score * 100).toFixed(1)}% model score`).join('\n'); addBubble(lines + '\n\n' + j.note, 'bot') } catch (err) { addBubble(err.message || 'Could not reach local server.', 'bot') } finally { $('scan').disabled = false; $('scan').textContent = 'Scan plant' } };
         for (const ev of ['dragenter', 'dragover']) $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('drag') }); for (const ev of ['dragleave', 'drop']) $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.remove('drag') }); $('drop').addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f && f.type.startsWith('image/')) { $('file').files = e.dataTransfer.files; $('file').dispatchEvent(new Event('change')) } });
         $('contribution').addEventListener('submit', async e => { e.preventDefault(); const status = $('contribStatus'); status.textContent = 'Saving…'; const data = { crop: $('ccrop').value, problem: $('problem').value, observation: $('observation').value, suggested_advice: $('advice').value, source: $('source').value }; try { const r = await fetch('/api/contributions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Submission failed'); status.textContent = j.message; e.target.reset() } catch (err) { status.textContent = err.message } }
         ); refresh();
