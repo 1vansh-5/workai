@@ -3,6 +3,7 @@
 No hosted AI is used and no generative model is claimed to be trained.
 """
 import json
+import logging
 import os
 import re
 import time
@@ -28,6 +29,8 @@ KCC_RESOURCE_ID = os.getenv("DATA_GOV_IN_RESOURCE_ID", "cef25fe2-9231-4128-8aec-
 KCC_API_URL = f"https://api.data.gov.in/resource/{KCC_RESOURCE_ID}"
 KCC_CACHE_SECONDS = 60 * 60
 KCC_CACHE = {}
+KCC_STATUS = {"status": "not_configured", "records": 0}
+LOGGER = logging.getLogger("uvicorn.error")
 app = FastAPI(title="AgriVision Local", version="0.1.0")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
@@ -110,7 +113,10 @@ def fetch_kcc_records(crop):
     """Fetch and cache a bounded crop-specific KCC API sample; never needs browser credentials."""
     api_key = os.getenv("DATA_GOV_IN_API_KEY", "").strip()
     crop_value = (crop or "").strip().title()
-    if not api_key or crop_value.casefold() not in {"rice", "maize"}:
+    if not api_key:
+        KCC_STATUS.update(status="not_configured", records=0)
+        return []
+    if crop_value.casefold() not in {"rice", "maize"}:
         return []
     cache_key = crop_value.casefold()
     cached = KCC_CACHE.get(cache_key)
@@ -129,13 +135,17 @@ def fetch_kcc_records(crop):
     try:
         with urlopen(request, timeout=12) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+    except (HTTPError, URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        KCC_STATUS.update(status=f"request_failed:{type(exc).__name__}", records=0)
+        LOGGER.warning("KCC API request failed (%s)", type(exc).__name__)
         return cached[1] if cached else []
     records = payload.get("records", []) if isinstance(payload, dict) else []
     if not isinstance(records, list):
         records = []
     records = [row for row in records if isinstance(row, dict)]
     KCC_CACHE[cache_key] = (now, records)
+    KCC_STATUS.update(status="connected" if records else "connected_no_records", records=len(records))
+    LOGGER.info("KCC API returned %s records for %s", len(records), crop_value)
     return records
 
 
@@ -216,7 +226,7 @@ def index():
 @app.get("/api/health")
 def health():
     return {"status": "running", "knowledge_entries": len(load_kb()),
-            "kcc_api": "configured" if os.getenv("DATA_GOV_IN_API_KEY") else "not configured",
+            "kcc_api": {**KCC_STATUS, "configured": bool(os.getenv("DATA_GOV_IN_API_KEY"))},
             "generative_model": "not trained / not loaded",
             "scan_model": "ready" if load_vision_model() else "not trained / not loaded",
             "crop_recommender": "ready" if load_model("crop_recommender.joblib") else "not trained",
