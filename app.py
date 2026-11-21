@@ -14,12 +14,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from tabular_models import estimate_production, load_model, recommend_crop
-from vision_model import load_vision_model, predict_plant_image
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -228,7 +227,7 @@ def health():
     return {"status": "running", "knowledge_entries": len(load_kb()),
             "kcc_api": {**KCC_STATUS, "configured": bool(os.getenv("DATA_GOV_IN_API_KEY"))},
             "generative_model": "not trained / not loaded",
-            "scan_model": "ready" if load_vision_model() else "not trained / not loaded",
+            "scan_model": "browser ONNX model (static/plant_disease.onnx)",
             "crop_recommender": "ready" if load_model("crop_recommender.joblib") else "not trained",
             "production_estimator": "ready" if load_model("production_estimator.joblib") else "not trained"}
 
@@ -278,29 +277,6 @@ def contribute(req: Contribution):
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
     return {"id": record["id"], "status": "pending_review",
             "message": "Saved for expert review. This will not become trusted advice automatically."}
-
-
-@app.post("/api/scan")
-def scan(file: UploadFile = File(...), crop: str | None = Form(default=None)):
-    max_bytes = 10 * 1024 * 1024
-    image_bytes = file.file.read(max_bytes + 1)
-    if len(image_bytes) > max_bytes:
-        raise HTTPException(status_code=413, detail="Image is too large. Maximum upload size is 10 MB.")
-    if not image_bytes:
-        raise HTTPException(status_code=400, detail="Choose an image before scanning.")
-    try:
-        predictions = predict_plant_image(image_bytes, crop=crop)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    if predictions is None:
-        raise HTTPException(status_code=503, detail="The trained photo checkpoint is missing. Place best_model.pt at data/models/plant_disease_cnn.pt and redeploy.")
-    results = []
-    for prediction in predictions:
-        knowledge = retrieve_for_prediction(prediction["crop"], prediction["condition"])
-        knowledge.extend(retrieve_kcc(prediction["condition"], prediction["crop"], limit=2))
-        results.append({**prediction, "knowledge": knowledge})
-    return {"results": results,
-            "note": "The image model suggests possible labels; its scores are not calibrated probabilities. Advice is shown only when a same-crop, condition-matched note exists. Missing causes or sources are not guessed. Confirm with a local KVK or plant pathologist before acting."}
 
 
 @app.get("/api/admin/pending")

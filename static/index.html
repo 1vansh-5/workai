@@ -586,6 +586,7 @@
             }
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.js"></script>
 </head>
 
 <body>
@@ -594,8 +595,8 @@
             <div class="brandmark">✳</div>
             <div>AgriVision<small>field companion</small></div>
         </div>
-        <div class="topright"><span class="local"><i></i>Runs on this server</span><span class="lang">English</span>
-        </div>
+        <div class="topright"><span class="local"><i></i>Image model runs in browser</span><span
+                class="lang">English</span></div>
     </header>
     <main class="wrap">
         <section class="intro">
@@ -627,12 +628,14 @@
                     </select></div>
                 <div class="notice">Research demo only: the current validation accuracy was about 48% on a small
                     dataset. Confirm results with a qualified local expert.</div>
+                <div class="sub" id="scanStatus" style="padding:0 16px 14px">Loading browser image model…</div>
             </aside>
             <div class="rightcol">
                 <section class="card chat">
                     <div class="chathead">
                         <div>
-                            <h2>Ask AgriVision</h2><span class="sub">Answers are retrieved from the crop notes</span>
+                            <h2>Ask AgriVision</h2><span class="sub">Answers are retrieved from crop notes and KCC
+                                records</span>
                         </div><span class="agent">Knowledge search</span>
                     </div>
                     <div class="log" id="log">
@@ -734,7 +737,12 @@
         async function refresh() { try { const r = await fetch('/api/health'); const j = await r.json(); $('kbCount').textContent = j.knowledge_entries + ' entries' } catch { $('kbCount').textContent = 'Server offline' } }
         async function ask(text) { if (!text.trim()) return; addBubble(text, 'user'); $('question').value = ''; try { const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, crop: $('crop').value || null, language: 'en' }) }); const j = await r.json(); addBubble(j.message, 'bot', j.matches || []) } catch { addBubble('Could not reach the local AgriVision server. Start the app and try again.') } }
         $('chatForm').addEventListener('submit', e => { e.preventDefault(); ask($('question').value) }); document.querySelectorAll('.chip').forEach(b => b.onclick = () => ask(b.textContent));
-        $('choose').onclick = () => $('file').click(); $('drop').onclick = e => { if (e.target.id !== 'preview') $('file').click() }; $('file').onchange = e => { const f = e.target.files[0]; if (!f) return; photo = f; const u = URL.createObjectURL(f); $('preview').src = u; $('preview').style.display = 'block'; $('dropcontent').style.display = 'none'; $('scan').disabled = false }; $('scan').onclick = async () => { if (!photo) return; const fd = new FormData(); fd.append('file', photo); if ($('crop').value) fd.append('crop', $('crop').value); $('scan').disabled = true; $('scan').textContent = 'Scanning…'; try { const r = await fetch('/api/scan', { method: 'POST', body: fd }); const raw = await r.text(); let j = {}; try { j = raw ? JSON.parse(raw) : {} } catch { throw new Error(`Server returned non-JSON (HTTP ${r.status}). Check the Render runtime logs.`) } if (!raw) throw new Error(`Server returned an empty response (HTTP ${r.status}). Check the Render runtime logs.`); if (!r.ok) throw new Error(j.detail || `Scan failed (HTTP ${r.status})`); const lines = j.results.map((r, i) => { const head = `${i + 1}. ${r.crop}: ${r.condition} — ${(r.score * 100).toFixed(1)}% model score`; if (!r.knowledge.length) return head + '\nNo matching note is in the knowledge base yet.'; const notes = r.knowledge.map(n => n.answer ? `Farmer question: ${n.title}\nKCC answer: ${n.answer}\nSource: ${n.source}${n.region ? ' | Region: ' + n.region : ''}${n.updated ? ' | Date: ' + n.updated : ''}` : [`Note: ${n.title}`, `Cause: ${n.cause || 'Not included in this knowledge note.'}`, `Management: ${n.treatment.length ? n.treatment.join('; ') : 'No management steps recorded.'}`, `Prevention: ${n.prevention.length ? n.prevention.join('; ') : 'No prevention steps recorded.'}`, `Source: ${n.source}${n.region ? ' | Region: ' + n.region : ''}${n.updated ? ' | Updated: ' + n.updated : ''}`].join('\n')); return head + '\n' + notes.join('\n\n') }).join('\n\n'); addBubble(lines + '\\n\\n' + j.note, 'bot') } catch (err) { addBubble(err.message || 'Could not reach local server.', 'bot') } finally { $('scan').disabled = false; $('scan').textContent = 'Scan plant' } };
+        let browserVision = null, visionLabels = [], visionSize = 224;
+        async function loadBrowserVision() { try { ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/'; ort.env.wasm.numThreads = 1; const [labelsResponse, session] = await Promise.all([fetch('/static/labels.json'), ort.InferenceSession.create('/static/plant_disease.onnx', { executionProviders: ['wasm'] })]); if (!labelsResponse.ok) throw Error('labels.json missing'); const meta = await labelsResponse.json(); browserVision = session; visionLabels = meta.labels; visionSize = meta.image_size || 224; $('scanStatus').textContent = 'Image model ready · photo stays in your browser'; $('scan').disabled = !photo } catch (e) { $('scanStatus').textContent = 'Image model not installed yet. Export the ONNX files and redeploy.'; $('scan').disabled = true } }
+        function imageTensor(img) { const size = visionSize, c = document.createElement('canvas'); c.width = c.height = size; const ctx = c.getContext('2d', { willReadFrequently: true }), scale = Math.max(size / img.naturalWidth, size / img.naturalHeight), w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale); ctx.drawImage(img, Math.floor((size - w) / 2), Math.floor((size - h) / 2), w, h); const rgba = ctx.getImageData(0, 0, size, size).data, area = size * size, data = new Float32Array(3 * area); for (let i = 0; i < area; i++) { data[i] = rgba[i * 4] / 127.5 - 1; data[area + i] = rgba[i * 4 + 1] / 127.5 - 1; data[area * 2 + i] = rgba[i * 4 + 2] / 127.5 - 1 } return new ort.Tensor('float32', data, [1, 3, size, size]) }
+        async function classifyInBrowser(file) { const img = new Image(); img.src = URL.createObjectURL(file); await img.decode(); const output = await browserVision.run({ image: imageTensor(img) }); URL.revokeObjectURL(img.src); const logits = output.logits.data, max = Math.max(...logits), exp = Array.from(logits, x => Math.exp(x - max)), sum = exp.reduce((a, b) => a + b, 0), selected = $('crop').value; return visionLabels.map((label, i) => ({ label, score: exp[i] / sum })).filter(x => !selected || x.label.split('::')[0].toLowerCase() === selected.toLowerCase()).sort((a, b) => b.score - a.score).slice(0, 3) }
+        $('choose').onclick = () => $('file').click(); $('drop').onclick = e => { if (e.target.id !== 'preview') $('file').click() }; $('file').onchange = e => { const f = e.target.files[0]; if (!f) return; photo = f; const u = URL.createObjectURL(f); $('preview').src = u; $('preview').style.display = 'block'; $('dropcontent').style.display = 'none'; $('scan').disabled = !browserVision }; $('scan').onclick = async () => { if (!photo || !browserVision) return; $('scan').disabled = true; $('scan').textContent = 'Scanning…'; try { const preds = await classifyInBrowser(photo), view = preds.map((p, i) => `${i + 1}. ${p.label.replace('::', ' · ').replaceAll('_', ' ')} — ${(p.score * 100).toFixed(1)}% model score`).join('\n'); const first = preds[0], parts = first.label.split('::'), q = `${parts[0]} ${parts.slice(1).join(' ')}`; let j = { message: 'No matching guidance found.', matches: [] }; try { const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: q, crop: parts[0] }) }); j = await r.json(); if (!r.ok) throw Error(j.detail || `Search returned HTTP ${r.status}`) } catch (e) { j.message = 'Knowledge search is unavailable right now.' } addBubble(view + '\n\n' + j.message, 'bot', j.matches || []) } catch (err) { addBubble('Could not scan this image in the browser: ' + err.message, 'bot') } finally { $('scan').disabled = false; $('scan').textContent = 'Scan plant' } };
+        loadBrowserVision();
         for (const ev of ['dragenter', 'dragover']) $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('drag') }); for (const ev of ['dragleave', 'drop']) $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.remove('drag') }); $('drop').addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f && f.type.startsWith('image/')) { $('file').files = e.dataTransfer.files; $('file').dispatchEvent(new Event('change')) } });
         $('contribution').addEventListener('submit', async e => { e.preventDefault(); const status = $('contribStatus'); status.textContent = 'Saving…'; const data = { crop: $('ccrop').value, problem: $('problem').value, observation: $('observation').value, suggested_advice: $('advice').value, source: $('source').value }; try { const r = await fetch('/api/contributions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); const j = await r.json(); if (!r.ok) throw new Error(j.detail || 'Submission failed'); status.textContent = j.message; e.target.reset() } catch (err) { status.textContent = err.message } }
         ); refresh();
