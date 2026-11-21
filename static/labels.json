@@ -1,0 +1,22 @@
+{
+  "labels": [
+    "maize::aphid",
+    "maize::curvularia_leaf_spot",
+    "maize::fall_armyworm",
+    "maize::faw_symptoms",
+    "maize::healthy",
+    "maize::maydis_leaf_blight",
+    "maize::sorghum_downy_mildew",
+    "maize::turcicum_leaf_blight",
+    "rice::bacterial_leaf_blight",
+    "rice::brown_spot",
+    "rice::false_smut",
+    "rice::healthy",
+    "rice::leaf_folder",
+    "rice::leaf_sheath_blight",
+    "rice::rice_skipper",
+    "rice::white_stem_borer",
+    "rice::yellow_stem_borer"
+  ],
+  "image_size": 224
+}
