@@ -1,81 +1,90 @@
-# AgriVision local project
+# AgriVision
 
-This folder contains the designed local web app, crop knowledge search, reviewed user-submission queue, two trained tabular models, and the user's from-scratch rice/maize photo classifier checkpoint.
+AgriVision is an experimental Rice and Maize image-classification demo with crop-note search, optional Kisan Call Centre (KCC) retrieval, crop recommendations, and historical production estimates.
 
-## New trained models
+The photo classifier runs in the browser using ONNX Runtime Web. Chat searches existing notes and, when available, KCC records. There is no trained generative language model and the app does not generate diagnoses.
 
-- **Crop recommender:** a random forest classifier trained from random initialization on `data/training/crop_recommendation.csv` (2,200 rows, 22 crop labels). It returns the three highest-scoring crop matches from soil/weather measurements.
-- **Historical production estimator:** a random forest regressor trained from random initialization on `data/training/crop_production.csv` (49,784 usable rows). It estimates historical production from location, year, season, crop, weather, soil moisture and area.
-- Training results and the exact data split are recorded in `data/models/training_report.json`.
+## Current image model
 
-The crop recommender's held-out random 20% accuracy was 99.3% and top-three accuracy was 100%. The compact production model (60 trees, depth limited to 18) was trained on 1997–2013 and evaluated on 2014: R² was 0.865, median absolute error was about 193 dataset units, and mean absolute error was about 251,238 dataset units. This large difference reflects a highly skewed production target and outliers; do not interpret the R² as a guarantee for a particular farm. The source CSVs do not document measurement or production units. Keep the same conventions as the source data.
+- 852 image records in the manifest across 17 crop-specific labels.
+- 596 training images, 119 validation images, and 137 held-out test images.
+- The CNN was initialized from random weights and trained from scratch.
+- The highest recorded validation accuracy was 50.4% on 119 images. The selected best-validation-loss checkpoint recorded 47.9%.
+- The training script does not load or evaluate the test split. Do not describe validation results as field or test accuracy.
+- A temporary 35% model-score cutoff suppresses guidance for low-scoring scans. This is a display safeguard, not a calibrated probability threshold.
 
-The photo classifier was trained from random initialization using 852 images in 17 Rice/Maize labels. Its best-validation-loss checkpoint reached 47.9% accuracy on the 119-image validation split (peak shown during training was 50.4%); the held-out test split has not been evaluated. Treat photo predictions as an early demonstration, not as reliable diagnosis. It only supports Rice and Maize labels. Image scanning now retrieves same-crop, condition-matched notes and displays available causes, management, prevention, and source metadata. It will say when no matching note or cause is recorded instead of inventing one. The existing notes do not yet cover every image class or include all causes/source citations. These models are not a general language model, and chat searches the included knowledge notes rather than generating free-form diagnoses. User submissions are saved for human review; they do not automatically retrain the models or become advice.
+The training photos are not stored in this repository. The manifest records metadata and image paths; the model files contain learned weights. Keep image files in your local dataset folder and confirm their license and consent before use.
 
 ## Run locally
 
-Requires Python 3.10 or newer.
+Use a supported Python installation, then run these commands from the repository folder:
 
-```bash
+```powershell
 python -m venv .venv
-# Windows PowerShell: .venv\Scripts\Activate.ps1
-# macOS/Linux: source .venv/bin/activate
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8000`. The tabular models and `data/models/plant_disease_cnn.pt` are loaded locally; photo uploads are sent to `/api/scan`. The photo model runs on CPU by default. This is a local demonstration setup, not a hardened public production service.
+Open http://127.0.0.1:8000. The browser loads `static/plant_disease.onnx` and `static/labels.json`. The selected photo is processed in the browser; the image file is not sent to the Python API for classification.
 
-## Retrain the tabular models
+## Train the image model
 
-Keep the CSVs at the paths under `data/training/`, install `requirements.txt`, then run:
+Keep the extracted Rice and Maize image folders on your computer. The CSV manifest's `relative_path` values must point to files under `--image-root`.
 
-```bash
-python training/train_tabular_models.py
+Example in Windows PowerShell:
+
+```powershell
+python training\train_vision.py --manifest training\image_cases.csv --image-root "C:\path\to\aidata" --output runs\my-run --epochs 25 --batch-size 16
 ```
 
-The script overwrites the two model artifacts and training report. Crop recommendation uses a stratified 80/20 split. Production estimation keeps 2014 out of training and uses it as a time-based holdout.
+The script trains from random initialization. It uses only rows marked `train` for gradient updates and `val` for checkpoint selection. It explicitly skips rows marked `test`. Keep the test split untouched until final evaluation.
 
-## APIs
+To use a newly trained checkpoint on the website, export it to ONNX and update the matching labels file in `static/`. Check the export script's arguments before running it.
 
-- `POST /api/recommend-crop` accepts `N`, `P`, `K`, `temperature`, `humidity`, `ph`, and `rainfall`.
-- `POST /api/predict-production` accepts state, district, year, season, crop, temperature, humidity, soil moisture and area.
-- `POST /api/chat` retrieves matching entries from the local knowledge file and, when configured, relevant rice/maize KCC Q&A.
-- `POST /api/contributions` saves a proposed note for review.
-- `POST /api/scan` returns an explicit unavailable response until a separate expert-labeled image dataset is collected and a vision model is trained.
+## Existing tabular models
 
-## Other project functions
+- **Crop recommender:** random forest classifier trained on 2,200 rows and 22 crop labels. The recorded held-out random-split accuracy is 99.3%; top-three accuracy is 100%.
+- **Historical production estimator:** random forest trained on 49,784 usable rows. It trains on years before 2014 and holds out 2014. The recorded R² is 0.865; mean absolute error is about 251,238 dataset units and median absolute error is about 193 dataset units.
 
-- Search the included crop notes and display matching treatment, prevention and quality notes.
-- Submit farmer observations into a pending queue.
-- Review suggestions with `python review_contributions.py`; only approved entries are added to `data/knowledge.json`.
-- Upload Rice or Maize photos to get the classifier's top matches and any matching knowledge-base notes or KCC Q&A.
+The source CSVs do not document measurement units. These are dataset results, not guarantees for a specific farm. See `data/models/training_report.json` for the recorded metrics and split details.
 
-## Connect Kisan Call Centre (KCC) answers
+## API routes
 
-The backend can optionally retrieve a bounded, crop-filtered sample of KCC Q&A
-records from data.gov.in for chat and image scans. It uses resource ID
-`cef25fe2-9231-4128-8aec-2c948fedd43f`, filters to Rice or Maize, and keeps a
-one-hour in-memory cache per crop. If the key is absent or the API is
-unavailable, local knowledge-base search continues to work.
+- `GET /api/health` - reports service, model, knowledge-base, and KCC status.
+- `POST /api/chat` - searches the local knowledge notes and, if the service responds, matching KCC records.
+- `POST /api/recommend-crop` - returns ranked crop matches for the supplied soil and weather values.
+- `POST /api/predict-production` - estimates historical production from the supplied location, year, crop, weather, soil, and area values.
+- `POST /api/contributions` - accepts a suggestion for review. Suggestions are not automatically trusted or used to train a model.
 
-In Render, add the environment variable `DATA_GOV_IN_API_KEY` with your private
-data.gov.in key. Optionally set `DATA_GOV_IN_RESOURCE_ID` if the official API
-details page provides a different resource ID. Never place the key in
-`static/index.html`, a committed file, or a public URL. The API page checks the
-key server-side in `app.py`; the browser only calls this app's `/api/chat` and
-`/api/scan` endpoints.
+The scan classifier is browser-side; there is no `/api/scan` route.
 
-KCC results are historical answers. The page shows their source, date and
-available region; review treatment advice against current local guidance before
-acting. This integration does not train the image model or a language model.
+## Knowledge notes and image matching
 
-## Extend the crop knowledge notes
+The notes are stored in `data/knowledge.json`. Each note may include crop aliases (`c`), search terms (`k`), condition title (`n`), treatment notes (`cure`), prevention (`prev`), quality notes (`q`), and optional cause/source/date fields.
 
-Each object in `data/knowledge.json` can include the existing fields `c` (crop aliases), `k` (search terms), `n` (condition title), `cure`, `prev`, and `q`, plus `cause`, `source`, `region`, `updated`, and `reviewed_by`. Add concise, crop-specific, expert-reviewed notes and include the original source and review date. The image scanner only attaches a note when both crop and condition match; it does not turn a model label into a cause by itself.
+The search filters notes by crop and symptom-specific terms. Generic words such as “leaf” and “blight” are ignored when matching so they do not, by themselves, attach advice for another condition. If a useful matching note is missing, add one only after checking the diagnosis and source. The image classifier currently has classes for Rice and Maize; the knowledge file does not yet contain a reviewed note for every image class.
 
-## Publishing
+## KCC configuration
 
-The two CSVs were supplied for this project. Check their source, license and attribution requirements before publishing the CSVs or trained artifacts in a public repository. Do not commit private farmer photos or contact details. The starter app also needs authentication, HTTPS, rate limits and data-retention controls before public deployment.
+To enable the optional data.gov.in lookup, set these server-side environment variables in your deployment:
 
-The knowledge file came from the linked project: https://github.com/1vansh-5/Agrivision-Ai-major-pro. Have a qualified local agronomist or KVK review advice before field use.
+- `DATA_GOV_IN_API_KEY` - your private data.gov.in API key.
+- `DATA_GOV_IN_RESOURCE_ID` - optional; the app has a default resource ID.
+
+The app caches successful Rice and Maize responses in memory for one hour. If the key is missing or the external API request fails, local note search remains available. Check `/api/health` and the deployment's runtime logs for KCC status. Never place the API key in browser code, a committed file, or a public URL. KCC records are historical answers; verify dates, region, and current local guidance.
+
+## Improve the model safely
+
+1. Evaluate the 137 held-out test images with a separate evaluator. Report overall and per-class results plus a confusion matrix.
+2. Check labels and group related photos from the same plant, plot, or visit into one data split.
+3. Collect more varied, permitted field photos for classes the evaluation shows are confused.
+4. Change one training setting at a time and compare validation results. Do not tune using the test set.
+5. Calibrate the rejection cutoff on validation data; a model score is not automatically a true probability.
+6. Keep user submissions pending until a knowledgeable reviewer verifies the label and source.
+
+For agronomic treatment decisions, confirm the diagnosis and advice with a qualified local expert or KVK. This project is a research and learning demo, not a field-validated diagnostic service.
+
+## Publishing and data handling
+
+Check source licenses, attribution, and consent before publishing datasets or model artifacts. Do not commit private farmer photos or personal details. The contribution queue currently writes to a local JSONL file; serverless deployments may not provide durable storage. Use an external database or storage service before relying on submissions in a public deployment.
