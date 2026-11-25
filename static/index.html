@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="theme-color" content="#153c2b">
-    <title>AgriVision — Field companion</title>
+    <title>AgriVision - Rice and maize crop guide</title>
     <style>
         :root {
             --forest: #153c2b;
@@ -593,7 +593,7 @@
     <header>
         <div class="brand">
             <div class="brandmark">✳</div>
-            <div>AgriVision<small>field companion</small></div>
+            <div>AgriVision<small>Rice and maize guide</small></div>
         </div>
         <div class="topright"><span class="local"><i></i>Image model runs in browser</span><span
                 class="lang">English</span></div>
@@ -601,9 +601,9 @@
     <main class="wrap">
         <section class="intro">
             <div>
-                <div class="eyebrow">Your crop, understood</div>
-                <h1>Good advice starts<br>with a closer look.</h1>
-                <p>Ask about crop problems, find reviewed notes, or share an observation for expert review.</p>
+                <div class="eyebrow">Rice and maize</div>
+                <h1>Scan a photo.<br>Review crop guidance.</h1>
+                <p>Upload a rice or maize photo for experimental model results, or search crop notes and available KCC answers.</p>
             </div>
             <div class="season"><span class="eyebrow">Knowledge library</span><b id="kbCount">Loading…</b><span
                     class="sub">crop guidance entries</span></div>
@@ -626,23 +626,18 @@
                         <option>Rice</option>
                         <option>Maize</option>
                     </select></div>
-                <div class="notice">Research demo only: the current validation accuracy was about 48% on a small
-                    dataset. Confirm results with a qualified local expert.</div>
+                <div class="notice">Research demo: best validation accuracy was 50.4% on 119 images. The 137-image test split has not been evaluated. Do not rely on scan results for treatment decisions.</div>
                 <div class="sub" id="scanStatus" style="padding:0 16px 14px">Loading browser image model…</div>
             </aside>
             <div class="rightcol">
                 <section class="card chat">
                     <div class="chathead">
                         <div>
-                            <h2>Ask AgriVision</h2><span class="sub">Answers are retrieved from crop notes and KCC
-                                records</span>
+                            <h2>Ask AgriVision</h2><span class="sub">Search local crop notes; KCC answers appear when the service is available.</span>
                         </div><span class="agent">Knowledge search</span>
                     </div>
                     <div class="log" id="log">
-                        <div class="bubble bot"><strong>Namaste. What are you seeing in your field?</strong>Try a crop
-                            and symptom, such as “rice leaves have brown diamond spots.” I’ll show matching notes when I
-                            find them.<div class="note">The generative model is not trained yet. This prototype displays
-                                matched knowledge, not a generated diagnosis.</div>
+                        <div class="bubble bot"><strong>Describe the crop and visible symptoms.</strong>Example: “rice leaves have brown spots.” I’ll search the available crop notes.<div class="note">This version retrieves existing notes and does not generate diagnoses.</div>
                         </div>
                     </div>
                     <div class="chips"><button class="chip">Rice blast</button><button class="chip">Yellow rust in
