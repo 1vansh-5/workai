@@ -92,16 +92,20 @@ def words(text):
     }
 
 
+GENERIC_MATCH_TERMS = {
+    "plant", "crop", "leaf", "leaves", "spot", "spots",
+    "blight", "disease", "symptom", "symptoms", "affected",
+}
+
+
 def retrieve(message, crop=None, limit=4):
-    """Find notes matching symptom words; use crop only as a filter."""
-    query = words(message) - words(crop or "")
+    """Find symptom-specific notes and avoid matching on generic crop/leaf words."""
+    query = words(message) - words(crop or "") - GENERIC_MATCH_TERMS
     ranked = []
 
     for entry in load_kb():
         aliases = [str(value).lower() for value in entry.get("c", [])]
 
-        # Restrict results to the selected crop without awarding a match
-        # merely because the note and request mention the same crop.
         if crop and not any(
             crop.lower() == alias
             or crop.lower() in alias
@@ -112,14 +116,14 @@ def retrieve(message, crop=None, limit=4):
 
         keys = [str(value).lower() for value in entry.get("k", [])]
         name = str(entry.get("n", ""))
-        score = len(query & words(" ".join([name, *keys])))
+        note_terms = words(" ".join([name, *keys])) - GENERIC_MATCH_TERMS
+        score = len(query & note_terms)
 
         if score > 0:
             ranked.append((score, entry))
 
     ranked.sort(key=lambda item: item[0], reverse=True)
     return [entry for _, entry in ranked[:limit]]
-
 
 def _field(record, *names):
     """Get a KCC API field without depending on schema capitalization."""
@@ -445,14 +449,22 @@ def chat(req: ChatRequest):
             ),
         }
 
+    if kcc_matches:
+        response_message = (
+            "These include retrieved KCC answers and local notes. "
+            "They are references, not a confirmed diagnosis. "
+            "Check each source and date, and confirm treatment with your local KVK."
+        )
+    else:
+        response_message = (
+            "These are matching local crop notes, not a confirmed diagnosis. "
+            "Confirm treatment with your local KVK."
+        )
+
     return {
         "mode": "knowledge_retrieval",
         "matches": matches,
-        "message": (
-            "These are retrieved notes and historical KCC answers, "
-            "not a model-generated diagnosis. Check the answer date "
-            "and confirm treatment with your local KVK."
-        ),
+        "message": response_message,
     }
 
 
